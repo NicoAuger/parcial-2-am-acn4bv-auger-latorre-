@@ -129,6 +129,10 @@ class MainActivity : AppCompatActivity() {
                 updateSummary()
                 updateCategoryChart()
                 toast(getString(R.string.msg_deleted))
+            },
+            onClick = { expense ->
+                val intent = ExpenseDetailActivity.newIntent(this, expense)
+                startActivity(intent)
             }
         )
         recyclerExpenses.adapter = expensesAdapter
@@ -330,10 +334,3 @@ class MainActivity : AppCompatActivity() {
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }
-
-/* Modelo de gasto con categoría, monto y nota opcional. */
-data class Expense(
-    val category: String,
-    val amount: Double,
-    val note: String
-)

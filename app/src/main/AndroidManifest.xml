@@ -16,6 +16,8 @@
         android:theme="@style/Theme.Material3.DayNight.NoActionBar"
         android:usesCleartextTraffic="false">
 
+        <activity android:name=".ExpenseDetailActivity" />
+
         <!-- Actividad principal que se ejecuta al iniciar la aplicación -->
         <activity
             android:name=".MainActivity"

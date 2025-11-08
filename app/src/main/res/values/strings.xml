@@ -52,4 +52,10 @@
     <string name="summary_remaining">Restante: $0</string>
     <string name="summary_spent">Gastado: $0</string>
 
+    <!-- ExpenseDetailActivity -->
+<string name="sin_nota">Sin nota</string>
+<!-- Por si no las tuvieras aún en el proyecto -->
+<string name="edit">Editar</string>
+<string name="delete">Eliminar</string>
+
 </resources>
