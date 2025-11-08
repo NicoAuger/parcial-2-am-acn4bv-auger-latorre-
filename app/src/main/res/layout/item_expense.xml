@@ -3,10 +3,10 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="48dp"
+    android:minHeight="@dimen/list_item_min_height"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="8dp"
+    android:padding="@dimen/space_s"
     android:background="?attr/selectableItemBackground"> <!-- Prefiero ripple en toda la fila -->
 
     <!-- Decido dividir en izquierda (categoría • nota) y derecha (monto + borrar). -->
@@ -23,13 +23,13 @@ android:textAppearance="?attr/textAppearanceBodyMedium" />
 android:id="@+id/tvRight"
 android:layout_width="wrap_content"
 android:layout_height="wrap_content"
-android:layout_marginEnd="8dp"
+android:layout_marginEnd="@dimen/space_s"
 android:textAppearance="?attr/textAppearanceBodyMedium" />
 
 <ImageButton
 android:id="@+id/btnDelete"
-android:layout_width="48dp"
-    android:layout_height="48dp"
+    android:layout_width="@dimen/icon_touch_target"
+    android:layout_height="@dimen/icon_touch_target"
     android:contentDescription="@string/cd_delete_expense"
     android:src="@android:drawable/ic_menu_delete"
     android:background="?attr/selectableItemBackgroundBorderless" />
