@@ -18,6 +18,8 @@
     <!-- ──────────────── BOTONES ──────────────── -->
     <string name="btn_add">Agregar</string>
     <string name="btn_set_budget">Fijar</string>
+    <string name="back">Volver</string>
+    <string name="menu_logout">Cerrar Sesión</string>
 
     <!-- ──────────────── CHART / GRÁFICO ──────────────── -->
     <!-- Mantengo formato con placeholders para datos dinámicos -->
@@ -34,6 +36,8 @@
     <!-- ──────────────── FAB MENU ──────────────── -->
     <string name="menu_clear_expenses">Limpiar gastos</string>
     <string name="menu_recalc_summary">Recalcular resumen</string>
+    <string name="menu_monthly_summary">Resumen mensual</string>
+
 
     <!-- ──────────────── HINTS DE CAMPOS DE FORMULARIO ──────────────── -->
     <string name="hint_amount">Monto</string>

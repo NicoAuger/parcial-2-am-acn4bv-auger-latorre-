@@ -57,6 +57,7 @@ class ExpenseDetailActivity : AppCompatActivity() {
         val tvNote = findViewById<TextView>(R.id.tvNote)
         val btnEdit = findViewById<MaterialButton>(R.id.btnEdit)
         val btnDelete = findViewById<MaterialButton>(R.id.btnDelete)
+        val btnBack = findViewById<MaterialButton>(R.id.btnBack)
 
         img.setImageResource(iconForCategory(expense.category))
         tvCategory.text = expense.category
@@ -70,6 +71,9 @@ class ExpenseDetailActivity : AppCompatActivity() {
                 putExtra(RES_ACTION, ACTION_DELETE)
                 putExtra(RES_ORIGINAL, expense)
             })
+            finish()
+        }
+        btnBack.setOnClickListener {
             finish()
         }
     }

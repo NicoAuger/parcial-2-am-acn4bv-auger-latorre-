@@ -20,14 +20,21 @@
 
         <!-- Actividad principal que se ejecuta al iniciar la aplicación -->
         <activity
-            android:name=".MainActivity"
+            android:name=".LoginActivity"
             android:exported="true">
-
-            <!-- Indica que esta actividad es el punto de entrada de la app y aparece en el launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Registra la actividad principal a la que se navega después del login -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
+        <activity
+            android:name=".MonthlySummaryActivity"
+            android:exported="false">
         </activity>
 
     </application>

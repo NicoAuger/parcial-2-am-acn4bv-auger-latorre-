@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "111424382318",
+    "project_id": "misgastosdiarios-jav-nic",
+    "storage_bucket": "misgastosdiarios-jav-nic.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:111424382318:android:f4dcb30f6649577dad0d7f",
+        "android_client_info": {
+          "package_name": "com.nauger.misgastosdiarios"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJG25X-2-YyKnKnsqr7_tELnrN-5WEbFw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

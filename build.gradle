@@ -1,5 +1,3 @@
-// Mantengo este bloque por compatibilidad, aunque con el plugins{} ya no solemos usar classpath.
-// Decido dejar solo los repos necesarios y sin classpath adicionales para no mezclar enfoques.
 buildscript {
     repositories {
         google()
@@ -8,18 +6,15 @@ buildscript {
 }
 
 plugins {
-    // Elijo mantener exactamente estas versiones porque ya te compilan en tu entorno académico.
     id 'com.android.application' version '8.13.0' apply false
     id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+    // Plugin de Google Services para Firebase
+    id 'com.google.gms.google-services' version '4.4.2' apply false
 }
 
 // Fuerzo JVM 17 en todas las tareas Kotlin de todos los módulos.
-// Lo dejo aquí para garantizar coherencia, aunque también lo voy a reiterar en el módulo app.
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
-        // Decido 17 porque AGP 8+ y toolchains modernas trabajan sobre JDK 17.
         jvmTarget = '17'
-        // Tip optional: si se usa mucha stdlib inline, podría activar -Xjsr305 o -Xjvm-default,
-//      freeCompilerArgs += ['-Xjvm-default=all'] // prefiero no tocar esto en un parcial
     }
 }

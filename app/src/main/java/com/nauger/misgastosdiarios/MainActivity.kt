@@ -15,12 +15,18 @@ import androidx.recyclerview.widget.RecyclerView
 import java.text.NumberFormat
 import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
-
+import android.content.Intent
+import java.text.SimpleDateFormat
+import java.util.Date
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 
 /* Actividad principal. Administra el presupuesto, la carga de gastos, el listado y el gráfico por categoría. */
 class MainActivity : AppCompatActivity() {
 
     /* Referencias a vistas principales del resumen y carga de datos. */
+    private lateinit var auth: FirebaseAuth
     private lateinit var etBudget: EditText
     private lateinit var btnSetBudget: Button
     private lateinit var tvBudget: TextView
@@ -46,6 +52,11 @@ class MainActivity : AppCompatActivity() {
     private var budget = 0.0
     private var spent = 0.0
     private var remainingDefaultColor: Int = 0
+
+    // Persistencia de resumen diario / mensual
+    private val prefs by lazy { getSharedPreferences("gastos_prefs", Context.MODE_PRIVATE) }
+    private val dayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
 
     /* Fuente de datos en memoria para los gastos (alcance académico). */
     private val expenses = mutableListOf<Expense>()
@@ -76,10 +87,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        auth = Firebase.auth
+
         bindViews()
+        val tvCurrentDate: TextView = findViewById(R.id.tvCurrentDate)
+        val dateFormat = SimpleDateFormat("dd 'de' MMMM 'de' yyyy", Locale("es", "ES"))
+        tvCurrentDate.text = dateFormat.format(Date())
         setupSpinner()
         initRecycler()
         initCategoryTotals()
+        // Revisa si cambió el día y guarda el total del día anterior
+        initDayRollingSummary()
         setupListeners()
 
         /* Al inicio, se bloquea la carga de gastos hasta fijar presupuesto. */
@@ -204,31 +222,95 @@ class MainActivity : AppCompatActivity() {
         etBudget.isEnabled = true
     }
 
-    /* Muestra menú flotante con acciones de limpieza y recálculo. */
+    /* Muestra menú flotante con acciones de limpieza, recálculo y resumen mensual. */
     private fun showFabMenu(anchor: android.view.View) {
         val popup = PopupMenu(this, anchor)
         popup.menu.add(0, 1, 0, getString(R.string.menu_clear_expenses))
         popup.menu.add(0, 2, 1, getString(R.string.menu_recalc_summary))
+        popup.menu.add(0, 3, 2, getString(R.string.menu_monthly_summary))
+        popup.menu.add(1, 4, 3, getString(R.string.menu_logout)) // MODIFICADO PARA USAR STRINGS.XML
         popup.setOnMenuItemClickListener { item: MenuItem ->
             when (item.itemId) {
                 1 -> { clearAll(); true }
                 2 -> { recalcTotalsFromScratch(); updateSummary(); updateCategoryChart(); true }
+                3 -> {
+                    startActivity(Intent(this, MonthlySummaryActivity::class.java))
+                    true
+                }
+                4 -> {
+                    signOut() // Llamamos a la función de cierre de sesión
+                    true
+                }
                 else -> false
             }
         }
         popup.show()
     }
 
+    private fun signOut() {
+        // Cierra la sesión del usuario en Firebase
+        auth.signOut()
+
+        // Crea un Intent para volver a LoginActivity
+        val intent = Intent(this, LoginActivity::class.java)
+
+        // Limpia la pila de actividades para que el usuario no pueda
+        // volver a MainActivity con el botón de "atrás"
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+        // Inicia la actividad de Login y cierra la actual
+        startActivity(intent)
+        finish()
+    }
+
+
     /* Elimina todos los gastos y reinicia acumulados y vistas. */
-    private fun clearAll() {
+    private fun clearAll(withToast: Boolean = true) {
         expenses.clear()
         spent = 0.0
         categoryTotals.keys.toList().forEach { categoryTotals[it] = 0.0 }
         expensesAdapter.submitList(expenses.toList())
         updateSummary()
         updateCategoryChart()
-        toast(getString(R.string.msg_expenses_cleared))
+        if (withToast) {
+            toast(getString(R.string.msg_expenses_cleared))
+        }
     }
+
+
+    // Revisa día actual vs último día guardado.
+    // Si cambió, guarda el total del día anterior y limpia datos para el nuevo día.
+    private fun initDayRollingSummary() {
+        val today = dayFormat.format(Date())
+        val lastDay = prefs.getString("last_day", null)
+
+        if (lastDay == null) {
+            // Primera vez que se abre la app
+            prefs.edit().putString("last_day", today).apply()
+        } else if (lastDay != today) {
+            // Cambió el día: guardamos total del día anterior
+            saveDayTotal(lastDay)
+
+            // Limpiamos los gastos en memoria pero SIN mostrar el toast
+            clearAll(withToast = false)
+
+            // Actualizamos el día actual
+            prefs.edit().putString("last_day", today).apply()
+        }
+    }
+
+    // Guarda el total gastado de un día en SharedPreferences
+    private fun saveDayTotal(day: String) {
+        val spentKey = "day_total_$day"
+        val budgetKey = "day_budget_$day" // Nueva clave para el presupuesto
+        prefs.edit()
+            .putFloat(spentKey, spent.toFloat())
+            .putFloat(budgetKey, budget.toFloat()) // Guardamos el presupuesto del día
+            .apply()
+    }
+
+
+
 
     /* Inicializa el mapa de categorías con valor 0. */
     private fun initCategoryTotals() {
@@ -260,6 +342,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvRemaining.setTextColor(remainingDefaultColor)
         }
+
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // Guarda los valores actuales para que MonthlySummaryActivity pueda leerlos.
+        prefs.edit()
+            .putFloat("current_budget", budget.toFloat())
+            .putFloat("current_spent", spent.toFloat())
+            .apply()
+        // --- FIN DE LA MODIFICACIÓN ---
     }
 
     /* Redibuja el gráfico por categoría en base a los acumulados y presupuesto. */
@@ -324,40 +414,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private val detailLauncher = registerForActivityResult(
-    ActivityResultContracts.StartActivityForResult()
-) { res ->
-    if (res.resultCode != RESULT_OK) return@registerForActivityResult
-    val data = res.data ?: return@registerForActivityResult
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = res.data ?: return@registerForActivityResult
 
-    val action = data.getStringExtra(ExpenseDetailActivity.RES_ACTION)
-    val original = data.getParcelableExtra<Expense>(ExpenseDetailActivity.RES_ORIGINAL)
-    when (action) {
-        ExpenseDetailActivity.ACTION_DELETE -> {
-            if (original != null) {
-                expenses.remove(original)
-                recalcTotalsFromScratch()
-                expensesAdapter.submitList(expenses.toList())
-                updateSummary()
-                updateCategoryChart()
-                toast(getString(R.string.msg_deleted))
-            }
-        }
-        ExpenseDetailActivity.ACTION_EDIT -> {
-            val updated = data.getParcelableExtra<Expense>(ExpenseDetailActivity.RES_UPDATED)
-            if (original != null && updated != null) {
-                val idx = expenses.indexOf(original)
-                if (idx >= 0) {
-                    expenses[idx] = updated
+        val action = data.getStringExtra(ExpenseDetailActivity.RES_ACTION)
+        val original = data.getParcelableExtra<Expense>(ExpenseDetailActivity.RES_ORIGINAL)
+        when (action) {
+            ExpenseDetailActivity.ACTION_DELETE -> {
+                if (original != null) {
+                    expenses.remove(original)
                     recalcTotalsFromScratch()
                     expensesAdapter.submitList(expenses.toList())
                     updateSummary()
                     updateCategoryChart()
-                    toast(getString(R.string.msg_saved))
+                    toast(getString(R.string.msg_deleted))
+                }
+            }
+            ExpenseDetailActivity.ACTION_EDIT -> {
+                val updated = data.getParcelableExtra<Expense>(ExpenseDetailActivity.RES_UPDATED)
+                if (original != null && updated != null) {
+                    val idx = expenses.indexOf(original)
+                    if (idx >= 0) {
+                        expenses[idx] = updated
+                        recalcTotalsFromScratch()
+                        expensesAdapter.submitList(expenses.toList())
+                        updateSummary()
+                        updateCategoryChart()
+                        toast(getString(R.string.msg_saved))
+                    }
                 }
             }
         }
     }
-}
 
     /* Helpers de parsing y UX. */
     private fun parseAmount(raw: String): Double? =
