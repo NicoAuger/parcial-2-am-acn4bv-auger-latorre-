@@ -16,12 +16,14 @@ import java.text.NumberFormat
 import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
+import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.Date
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.bumptech.glide.Glide
+import com.google.firebase.firestore.FirebaseFirestore
 
 // IMPORTS NUEVOS PARA HTTP
 import okhttp3.OkHttpClient
@@ -31,6 +33,7 @@ import okhttp3.Request
 class MainActivity : AppCompatActivity() {
 
     /* Referencias a vistas principales del resumen y carga de datos. */
+    private lateinit var db: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
     private lateinit var etBudget: EditText
     private lateinit var btnSetBudget: Button
@@ -103,6 +106,23 @@ class MainActivity : AppCompatActivity() {
 
         auth = Firebase.auth
 
+        // Inicializar Firestore
+        db = FirebaseFirestore.getInstance()
+
+        // Obtener UID del usuario actual
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+
+        // Si tenemos un usuario, cargamos sus datos
+        if (userId != null) {
+            loadUserData(userId)
+            loadExpensesData(userId)
+        } else {
+            // Opcional: Manejar el caso en que no haya usuario logueado
+            // Podrías llevarlo al LoginActivity, por ejemplo.
+            Log.w("MainActivity", "No se encontró UID de usuario.")
+            Toast.makeText(this, "Error: Usuario no identificado.", Toast.LENGTH_LONG).show()
+        }
+
         bindViews()
         val tvCurrentDate: TextView = findViewById(R.id.tvCurrentDate)
         val dateFormat = SimpleDateFormat("dd 'de' MMMM 'de' yyyy", Locale("es", "ES"))
@@ -130,6 +150,83 @@ class MainActivity : AppCompatActivity() {
             .placeholder(R.drawable.ic_cat_otros) // Opcional: se muestra mientras carga
             .error(R.drawable.ic_cat_otros)       // Opcional: se muestra si hay un error
             .into(imgHeader)
+
+    }
+
+    private fun loadUserData(uid: String) {
+        val userDocRef = db.collection("usuarios").document(uid)
+
+        userDocRef.get()
+            .addOnSuccessListener { documentSnapshot ->
+                if (documentSnapshot.exists()) {
+                    val presupuestoFirestore = documentSnapshot.getDouble("presupuestoMensual")
+
+                    if (presupuestoFirestore != null && presupuestoFirestore > 0) {
+                        // 1. ACTUALIZAR la variable de la clase
+                        this.budget = presupuestoFirestore
+
+                        // 2. MOSTRAR el valor en las vistas que ya inicializaste en bindViews()
+                        etBudget.setText(this.budget.toString())
+
+                        // 3. HABILITAR los inputs para que se puedan agregar gastos
+                        setInputsEnabled(true)
+
+                        // 4. ACTUALIZAR el resumen
+                        updateSummary()
+
+                        Log.d("FIRESTORE_SUCCESS", "Presupuesto cargado y aplicado: ${this.budget}")
+                    } else {
+                        Log.d("FIRESTORE_INFO", "No se encontró presupuesto o es cero.")
+                    }
+
+                } else {
+                    Log.w("FIRESTORE_WARN", "El documento del usuario con UID $uid no existe.")
+                    Toast.makeText(this, "No se encontró perfil de usuario.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .addOnFailureListener { exception ->
+                Log.e("FIRESTORE_ERROR", "Error al cargar datos del usuario", exception)
+                Toast.makeText(this, "Error al cargar el presupuesto.", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun loadExpensesData(uid: String) {
+        // 1. Apuntamos a la colección "gastos" y filtramos por el UID del usuario.
+        // Usamos orderBy para que los gastos se muestren en el orden en que se crearon.
+        db.collection("gastos")
+            .whereEqualTo("userId", uid)
+            .orderBy("fecha", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .get()
+            .addOnSuccessListener { querySnapshot ->
+                // ¡Éxito al leer la colección!
+                // Limpiamos la lista local para no duplicar datos si esta función se llama de nuevo.
+                expenses.clear()
+
+                // 2. Recorremos cada documento (gasto) que encontramos
+                for (document in querySnapshot.documents) {
+                    // 3. Convertimos el documento de Firestore a nuestro objeto "Expense"
+                    val gasto = Expense(
+                        id = document.id,
+                        amount = document.getDouble("monto") ?: 0.0,
+                        category = document.getString("categoria") ?: "Otros",
+                        note = document.getString("nota") ?: ""
+                    )
+                    expenses.add(gasto)
+                }
+
+                // 4. Una vez cargados todos los gastos, recalculamos todo y actualizamos la UI
+                recalcTotalsFromScratch()
+                expensesAdapter.submitList(expenses.toList())
+                updateSummary()
+                updateCategoryChart()
+
+                Log.d("FIRESTORE_READ_LIST", "${expenses.size} gastos cargados desde Firestore.")
+            }
+            .addOnFailureListener { exception ->
+                // ¡Error al leer la colección!
+                Log.e("FIRESTORE_READ_LIST", "Error al cargar los gastos", exception)
+                toast("No se pudieron cargar los gastos anteriores.")
+            }
     }
 
     /* Vincula componentes de la interfaz con sus IDs. */
@@ -169,13 +266,35 @@ class MainActivity : AppCompatActivity() {
     private fun initRecycler() {
         recyclerExpenses.layoutManager = LinearLayoutManager(this)
         expensesAdapter = ExpenseAdapter(
-            onDelete = { expense ->
-                expenses.remove(expense)
-                recalcTotalsFromScratch()
-                expensesAdapter.submitList(expenses.toList())
-                updateSummary()
-                updateCategoryChart()
-                toast(getString(R.string.msg_deleted))
+            onDelete = { expenseToDelete ->
+                // Primero, verificamos si el gasto tiene un ID de Firestore.
+                // Si el ID está en blanco, es un dato viejo o un error, así que no intentamos borrarlo de la nube.
+                if (expenseToDelete.id.isBlank()) {
+                    Log.w("FIRESTORE_DELETE", "Intento de borrar gasto sin ID de Firestore. Abortado.")
+                    toast("No se puede borrar este gasto.")
+                    return@ExpenseAdapter
+                }
+
+                // Si tiene ID, procedemos a borrarlo de Firestore.
+                db.collection("gastos").document(expenseToDelete.id)
+                    .delete()
+                    .addOnSuccessListener {
+                        // ¡Éxito al borrar en Firestore!
+                        Log.d("FIRESTORE_DELETE", "Gasto ${expenseToDelete.id} borrado de Firestore.")
+                        toast(getString(R.string.msg_deleted))
+
+                        // SOLO SI SE BORRÓ DE LA NUBE, lo quitamos de la lista local y actualizamos la UI.
+                        expenses.remove(expenseToDelete)
+                        recalcTotalsFromScratch()
+                        expensesAdapter.submitList(expenses.toList())
+                        updateSummary()
+                        updateCategoryChart()
+                    }
+                    .addOnFailureListener { e ->
+                        // ¡Error al borrar!
+                        Log.e("FIRESTORE_DELETE", "Error al borrar gasto ${expenseToDelete.id}", e)
+                        toast("Error al borrar el gasto. Inténtalo de nuevo.")
+                    }
             },
             onClick = { expense ->
                 val intent = ExpenseDetailActivity.newIntent(this, expense)
@@ -222,19 +341,50 @@ class MainActivity : AppCompatActivity() {
             val category = spCategory.selectedItem?.toString().orEmpty().ifBlank { "Otros" }
             val note = etNote.text?.toString().orEmpty().trim()
 
-            /* Inserta el gasto y actualiza acumulados y UI. */
-            val expense = Expense(category = category, amount = amount, note = note)
-            expenses.add(expense)
-            spent += amount
-            categoryTotals[category] = (categoryTotals[category] ?: 0.0) + amount
-            expensesAdapter.submitList(expenses.toList())
-            updateSummary()
-            updateCategoryChart()
+            // 1. Asegurarnos de que tenemos el UID para asociar el gasto
+            val userId = auth.currentUser?.uid
+            if (userId == null) {
+                toast("Error: No se pudo identificar al usuario para guardar el gasto.")
+                return@setOnClickListener
+            }
 
-            /* Limpia campos y mejora la UX post-carga. */
-            etAmount.text?.clear()
-            etNote.text?.clear()
-            etAmount.clearFocus()
+            // 2. Creamos un mapa de datos para Firestore
+            val gastoParaGuardar = hashMapOf(
+                "userId" to userId,
+                "monto" to amount,
+                "categoria" to category,
+                "nota" to note,
+                "fecha" to com.google.firebase.firestore.FieldValue.serverTimestamp() // Usamos la fecha del servidor
+            )
+
+            // 3. Guardamos en la colección "gastos"
+            db.collection("gastos")
+                .add(gastoParaGuardar)
+                .addOnSuccessListener { documentReference ->
+                    // ¡Éxito al guardar en Firestore!
+                    Log.d("FIRESTORE_WRITE", "Gasto guardado con ID: ${documentReference.id}")
+                    toast("Gasto agregado con éxito")
+
+                    // Ahora sí, actualizamos la UI localmente como antes
+                    // PERO ya no crearemos un "Expense" nuevo, sino que el que se muestre
+                    // debería venir de Firestore. Por ahora, lo dejamos así para probar la escritura.
+                    val expense = Expense(id = documentReference.id, category = category, amount = amount, note = note)
+                    expenses.add(expense)
+                    recalcTotalsFromScratch() // Usamos esto para recalcular todo
+                    expensesAdapter.submitList(expenses.toList())
+                    updateSummary()
+                    updateCategoryChart()
+
+                    etAmount.text?.clear()
+                    etNote.text?.clear()
+                    etAmount.clearFocus()
+                }
+                .addOnFailureListener { e ->
+                    // ¡Error al guardar en Firestore!
+                    Log.e("FIRESTORE_WRITE", "Error al guardar el gasto", e)
+                    toast("Error al guardar el gasto. Intenta de nuevo.")
+                }
+
         }
 
         fabMenu.setOnClickListener { showFabMenu(it) }

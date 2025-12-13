@@ -64,4 +64,11 @@ dependencies {
     // Glide para descargar y mostrar imágenes desde URL
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     kapt 'com.github.bumptech.glide:compiler:4.16.0'
+
+    // Importar la BoM de Firebase (asegúrate de que ya la tienes, si no, agrégala)
+    implementation platform('com.google.firebase:firebase-bom:33.1.0')
+
+    // Agregar la dependencia de Firestore
+    implementation 'com.google.firebase:firebase-firestore'
+
 }
